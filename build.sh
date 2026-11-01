@@ -14,7 +14,7 @@ x86_64-w64-mingw32-g++ $FLAGS -municode -mwindows -s -Wl,--no-insert-timestamp \
 # shellcheck disable=SC2086
 x86_64-w64-mingw32-g++ $FLAGS tests/unit.cpp -o dist/unit.exe
 # shellcheck disable=SC2086
-x86_64-w64-mingw32-g++ $FLAGS -municode -mconsole tests/ui_test.cpp -o dist/ui_test.exe -lgdiplus
+x86_64-w64-mingw32-g++ $FLAGS -municode -mconsole tests/ui_test.cpp -o dist/ui_test.exe -lgdiplus -lgdi32
 makensis -V2 -INPUTCHARSET UTF8 -DVERSION="$VERSION" installer/CaptureClean.nsi
 cp -f dist/CaptureClean.exe "dist/CaptureClean-$VERSION.exe"
 (cd dist && sha256sum "CaptureClean-Setup-$VERSION.exe" > "CaptureClean-Setup-$VERSION.exe.sha256")

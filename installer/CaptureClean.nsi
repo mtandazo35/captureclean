@@ -110,7 +110,7 @@ Section "CaptureClean (requerido)" SEC_MAIN
   SetOutPath "$INSTDIR"
   Delete "$INSTDIR\CaptureClean.ini"
   SetOverwrite on
-  File "../dist/CaptureClean.exe"
+  File "..\dist\CaptureClean.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\CaptureClean.lnk" "$INSTDIR\CaptureClean.exe"
 SectionEnd
