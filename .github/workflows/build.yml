@@ -15,6 +15,7 @@ jobs:
           name: dist
           path: |
             dist/*.exe
+            dist/*.sha256
 
   test:
     needs: build
@@ -31,18 +32,54 @@ jobs:
       - name: Instalador
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist\CaptureClean-Setup-*.exe | Select-Object -First 1
-          Start-Process $setup.FullName -ArgumentList '/S' -Wait
-          $exe = "$env:LOCALAPPDATA\CaptureClean\CaptureClean.exe"
-          if (-not (Test-Path $exe)) { throw 'No se instalo el ejecutable' }
-          Start-Sleep 2
-          if (-not (Get-Process CaptureClean -ErrorAction SilentlyContinue)) { throw 'El instalador no abrio la aplicacion' }
-          $icon = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CaptureClean').DisplayIcon
-          if ($icon -match '\\\\') { throw "Barras dobles en el registro: $icon" }
-          Stop-Process -Name CaptureClean -Force
-          Start-Process "$env:LOCALAPPDATA\CaptureClean\Uninstall.exe" -ArgumentList '/S' -Wait
-          Start-Sleep 3
-          if (Test-Path $exe) { throw 'El desinstalador no borro el ejecutable' }
+          # Start-Process -Wait tambien esperaria a la aplicacion que abre el instalador.
+          function Run-Setup($file, $arguments) {
+            $p = Start-Process $file -ArgumentList $arguments -PassThru
+            if (-not $p.WaitForExit(120000)) { throw "$file no termino" }
+            Start-Sleep 2
+          }
+          function Is-Running { [bool](Get-Process CaptureClean -ErrorAction SilentlyContinue) }
+          $setup = (Get-ChildItem dist\CaptureClean-Setup-*.exe | Select-Object -First 1).FullName
+          $uninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CaptureClean'
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $hash = (Get-Content "$setup.sha256").Split(' ')[0]
+          if ($hash -ne (Get-FileHash $setup -Algorithm SHA256).Hash) { throw 'SHA256 no coincide' }
+
+          # Silencioso, en una carpeta con espacios: instala sin abrir la aplicacion.
+          $dir = 'C:\cc prueba'
+          Run-Setup $setup "/S /D=$dir"
+          if (-not (Test-Path "$dir\CaptureClean.exe")) { throw 'No se instalo el ejecutable' }
+          if (Is-Running) { throw '/S no debe abrir la aplicacion' }
+          $reg = Get-ItemProperty $uninstKey
+          if ($reg.InstallLocation -ne $dir) { throw "InstallLocation: $($reg.InstallLocation)" }
+          if ($reg.DisplayIcon -match '\\\\') { throw "Barras dobles en el registro: $($reg.DisplayIcon)" }
+          if ($reg.EstimatedSize -lt 100) { throw "EstimatedSize: $($reg.EstimatedSize)" }
+          $run = (Get-ItemProperty $runKey).CaptureClean
+          if ($run -ne "`"$dir\CaptureClean.exe`" --background") { throw "Run: $run" }
+
+          # /ABRIR abre la aplicacion, y la ruta con espacios funciona.
+          Run-Setup $setup '/S /ABRIR'
+          if (-not (Is-Running)) { throw '/ABRIR no abrio la aplicacion' }
+
+          # Actualizar con la aplicacion abierta: la cierra y respeta la carpeta existente.
+          Run-Setup $setup '/S'
+          if (Is-Running) { throw 'No cerro la aplicacion al actualizar' }
+          if (Test-Path "$env:LOCALAPPDATA\CaptureClean\CaptureClean.exe") { throw 'Actualizar creo una segunda copia' }
+
+          # Una version mas nueva instalada: en silencio no se sobrescribe.
+          Set-ItemProperty $uninstKey DisplayVersion '99.0.0'
+          $before = (Get-Item "$dir\CaptureClean.exe").LastWriteTimeUtc
+          Run-Setup $setup '/S'
+          if ((Get-ItemProperty $uninstKey).DisplayVersion -ne '99.0.0') { throw 'Instalo una version anterior en silencio' }
+
+          # Desinstalar: borra el programa y conserva las preferencias.
+          $p = Start-Process "$dir\Uninstall.exe" -ArgumentList '/S' -PassThru
+          $p.WaitForExit(60000) | Out-Null
+          Start-Sleep 4
+          if (Test-Path "$dir\CaptureClean.exe") { throw 'El desinstalador no borro el ejecutable' }
+          if (Test-Path $uninstKey) { throw 'El desinstalador dejo la entrada de Aplicaciones' }
+          if ((Get-ItemProperty $runKey).CaptureClean) { throw 'El desinstalador dejo el inicio con Windows' }
+          if (-not (Test-Path 'HKCU:\Software\CaptureClean')) { throw 'En silencio deben conservarse las preferencias' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

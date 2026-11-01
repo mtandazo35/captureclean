@@ -32,6 +32,16 @@ Reescrita sobre el código de la 2.10.1, recuperando las funciones de la 3.2.8.
 - `Esc` cancela el texto en vez de confirmarlo.
 - Las barras se colocan dentro del monitor de la selección, nunca en zonas muertas entre monitores de distinto tamaño.
 - Un clic o arrastre accidental ya no cierra la captura.
-- Instalador: funciona con espacios en el nombre de usuario, sin barras dobles en el registro y sin pisar la opción de inicio con Windows.
+
+**Instalador:**
+
+- Asistente en español, con casillas para el acceso directo, el inicio con Windows y abrir la aplicación al terminar.
+- Detecta la versión instalada: actualiza en la misma carpeta, conserva lo que tenías elegido y avisa antes de instalar una versión más antigua.
+- Comprueba que el sistema sea Windows 10 1703 o posterior de 64 bits.
+- Cierra la aplicación de forma ordenada y, si no puede reemplazarla, lo explica en vez de mostrar un error técnico.
+- Al desinstalar pregunta si también se borran las preferencias; las capturas no se tocan nunca.
+- La instalación silenciosa (`/S`) no abre la aplicación, salvo con `/ABRIR`.
+- Funciona con espacios en la ruta, sin barras dobles en el registro, y muestra el tamaño en Aplicaciones de Windows.
+- Cada versión se publica con su SHA256.
 
 **Proyecto:** se elimina el servidor de subida, que no usaba el cliente; la versión se define en un solo archivo; y las pruebas comprueban comportamiento real.

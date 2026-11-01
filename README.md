@@ -21,6 +21,12 @@ Durante la captura:
 
 Las preferencias (bandeja → *Preferencias…*) se guardan en `HKCU\Software\CaptureClean`, la misma clave que las versiones 3.x, de modo que se conservan al actualizar.
 
+## Instalar
+
+Ejecuta `CaptureClean-Setup-<versión>.exe`. No necesita permisos de administrador y requiere Windows 10 1703 o posterior de 64 bits. Para comprobar que el archivo no se alteró, compara `certutil -hashfile CaptureClean-Setup-<versión>.exe SHA256` con el archivo `.sha256` que lo acompaña.
+
+Instalación desatendida: `/S` silenciosa, `/ABRIR` abre la aplicación al terminar, `/D=C:\carpeta` elige la carpeta (siempre al final y sin comillas). Para desinstalar en silencio: `Uninstall.exe /S`, que conserva las preferencias.
+
 ## Compilar
 
 Desde Linux, con `mingw-w64` y `nsis`:
