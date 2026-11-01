@@ -1,5 +1,9 @@
 # Cambios
 
+## 3.3.1
+
+- Formato de texto: negrita, cursiva y subrayado, combinables. Se eligen en el menú *Tamaño y formato* con la herramienta Texto, con `Ctrl+B`, `Ctrl+I` y `Ctrl+U`, o en Preferencias. Se aplican al texto que se escribe, al seleccionado o, si no hay ninguno, a los textos siguientes.
+
 ## 3.3.0
 
 Reescrita sobre el código de la 2.10.1, recuperando las funciones de la 3.2.8.

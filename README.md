@@ -16,7 +16,7 @@ Durante la captura:
 
 - **Selección:** se redimensiona con los tiradores, se mueve con *Seleccionar y mover* o con las flechas (`Mayús` = 10 px).
 - **Herramientas:** lápiz, línea, flecha, rectángulo, elipse, texto, resaltador, pixelar y numerar. Todo lo dibujado es un objeto que se puede mover o borrar (`Supr`) con *Seleccionar y mover*.
-- **Texto:** se escribe sobre la captura. `Intro` confirma, `Mayús+Intro` añade una línea, `Esc` cancela, `Ctrl+V` pega y el doble clic vuelve a editarlo.
+- **Texto:** se escribe sobre la captura. `Intro` confirma, `Mayús+Intro` añade una línea, `Esc` cancela, `Ctrl+V` pega y el doble clic vuelve a editarlo. `Ctrl+B`, `Ctrl+I` y `Ctrl+U` aplican negrita, cursiva y subrayado, también disponibles en el menú *Tamaño y formato*.
 - **Teclas:** `Ctrl+C` copia y cierra, `Ctrl+S` guarda, `Ctrl+Z` deshace, `Ctrl+Y` rehace, `Esc` cierra. Mantener `Ctrl` al soltar la selección copia directamente.
 
 Las preferencias (bandeja → *Preferencias…*) se guardan en `HKCU\Software\CaptureClean`, la misma clave que las versiones 3.x, de modo que se conservan al actualizar.

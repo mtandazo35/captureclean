@@ -45,6 +45,8 @@ void LoadSettings() {
   s.highlighterWidth = logic::NearestOf((int)ReadDword(L"HighlighterWidth", s.highlighterWidth), kHighlighterValues);
   s.textSize = logic::NearestOf((int)ReadDword(L"TextSize", s.textSize), kTextSizeValues);
   s.textBold = ReadDword(L"TextBold", s.textBold) != 0;
+  s.textItalic = ReadDword(L"TextItalic", s.textItalic) != 0;
+  s.textUnderline = ReadDword(L"TextUnderline", s.textUnderline) != 0;
   s.pixelBlock = logic::NearestOf((int)ReadDword(L"PixelBlock", s.pixelBlock), kPixelBlockValues);
   s.numberSize = logic::NearestOf((int)ReadDword(L"NumberSize", s.numberSize), kNumberSizeValues);
   s.lastTool = std::clamp((int)ReadDword(L"LastTool", s.lastTool), 0, 9);
@@ -64,6 +66,8 @@ void SaveSettings() {
   WriteDword(L"HighlighterWidth", s.highlighterWidth);
   WriteDword(L"TextSize", s.textSize);
   WriteDword(L"TextBold", s.textBold);
+  WriteDword(L"TextItalic", s.textItalic);
+  WriteDword(L"TextUnderline", s.textUnderline);
   WriteDword(L"PixelBlock", s.pixelBlock);
   WriteDword(L"NumberSize", s.numberSize);
   WriteDword(L"LastTool", s.lastTool);

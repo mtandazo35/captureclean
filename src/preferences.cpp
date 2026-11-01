@@ -7,7 +7,7 @@
 #include <string>
 
 enum {
-  ID_AUTOSTART = 100, ID_MAGNIFIER, ID_CONFIRM, ID_THICKNESS, ID_HIGHLIGHTER, ID_TEXTSIZE, ID_BOLD,
+  ID_AUTOSTART = 100, ID_MAGNIFIER, ID_CONFIRM, ID_THICKNESS, ID_HIGHLIGHTER, ID_TEXTSIZE, ID_BOLD, ID_ITALIC, ID_UNDERLINE,
   ID_AUTOSAVE, ID_FOLDER, ID_BROWSE, ID_FORMAT
 };
 
@@ -72,6 +72,8 @@ static void Apply(HWND h) {
   s.highlighterWidth = kHighlighterValues[ComboIndex(h, ID_HIGHLIGHTER)];
   s.textSize = kTextSizeValues[ComboIndex(h, ID_TEXTSIZE)];
   s.textBold = IsDlgButtonChecked(h, ID_BOLD) == BST_CHECKED;
+  s.textItalic = IsDlgButtonChecked(h, ID_ITALIC) == BST_CHECKED;
+  s.textUnderline = IsDlgButtonChecked(h, ID_UNDERLINE) == BST_CHECKED;
   s.autoSave = autoSave;
   s.autoSaveFolder = folder;
   s.autoSaveFormat = ComboIndex(h, ID_FORMAT);
@@ -95,7 +97,12 @@ static LRESULT CALLBACK PreferencesProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       AddCombo(h, L"Tamaño del resaltador:", 150, ID_HIGHLIGHTER, high, IndexOf(s.highlighterWidth, kHighlighterValues));
       const wchar_t* const text[3] = {L"Pequeño (18 px)", L"Mediano (24 px)", L"Grande (32 px)"};
       AddCombo(h, L"Tamaño del texto:", 182, ID_TEXTSIZE, text, IndexOf(s.textSize, kTextSizeValues));
-      AddCheck(h, L"Texto en negrita", 214, ID_BOLD, s.textBold);
+      AddControl(h, L"BUTTON", L"Negrita", WS_TABSTOP | BS_AUTOCHECKBOX, 16, 214, 100, 22, ID_BOLD);
+      AddControl(h, L"BUTTON", L"Cursiva", WS_TABSTOP | BS_AUTOCHECKBOX, 126, 214, 100, 22, ID_ITALIC);
+      AddControl(h, L"BUTTON", L"Subrayado", WS_TABSTOP | BS_AUTOCHECKBOX, 236, 214, 120, 22, ID_UNDERLINE);
+      CheckDlgButton(h, ID_BOLD, s.textBold ? BST_CHECKED : BST_UNCHECKED);
+      CheckDlgButton(h, ID_ITALIC, s.textItalic ? BST_CHECKED : BST_UNCHECKED);
+      CheckDlgButton(h, ID_UNDERLINE, s.textUnderline ? BST_CHECKED : BST_UNCHECKED);
       AddCheck(h, L"Guardar automáticamente al copiar o guardar", 246, ID_AUTOSAVE, s.autoSave);
       AddControl(h, L"STATIC", L"Carpeta:", 0, 16, 277, 60, 20, 0);
       AddControl(h, L"EDIT", s.autoSaveFolder.c_str(), WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL, 80, 274, 190, 24, ID_FOLDER);

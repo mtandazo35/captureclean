@@ -7,6 +7,8 @@ struct Settings {
   int highlighterWidth = 20;
   int textSize = 24;
   bool textBold = true;
+  bool textItalic = false;
+  bool textUnderline = false;
   int pixelBlock = 12;
   int numberSize = 30;
   int lastTool = 1;

@@ -32,7 +32,7 @@ struct Annotation {
   std::vector<POINT> pts;  // trazos: todos; formas: 2 esquinas; texto: esquina; numero: centro
   COLORREF color = 0;
   int width = 3;   // grosor; numero: diametro; texto: alto de letra; pixelar: tamano de bloque
-  bool bold = false;
+  int fontStyle = 0;  // combinacion de FontStyleBold, FontStyleItalic y FontStyleUnderline
   int number = 0;
   wstring text;
   SIZE textSize{};
@@ -78,6 +78,7 @@ struct Overlay {
   logic::TextEdit edit;
   POINT editAt{};
   int editIndex = -1;  // -1: texto nuevo; si no, el objeto que se esta reeditando
+  int editStyle = 0;
 
   logic::BarLayout bars{};
   double scale = 1;
@@ -121,15 +122,17 @@ static REAL LineWidth(Graphics& g, const wstring& line, Font& font) {
 }
 static void MeasureAnnotationText(Graphics& g, Annotation& a) {
   FontFamily family(L"Segoe UI");
-  Font font(&family, (REAL)a.width, a.bold ? FontStyleBold : FontStyleRegular, UnitPixel);
+  Font font(&family, (REAL)a.width, a.fontStyle, UnitPixel);
   const auto lines = SplitLines(a.text);
   REAL widest = 0;
   for (const auto& line : lines) widest = std::max(widest, LineWidth(g, line, font));
-  a.textSize = {(LONG)std::ceil(widest) + 1, (LONG)std::ceil(font.GetHeight(&g) * lines.size())};
+  // La cursiva sobresale por la derecha de lo que mide MeasureString.
+  const LONG slant = (a.fontStyle & FontStyleItalic) ? a.width / 4 : 0;
+  a.textSize = {(LONG)std::ceil(widest) + 1 + slant, (LONG)std::ceil(font.GetHeight(&g) * lines.size())};
 }
 static void DrawAnnotationText(Graphics& g, const Annotation& a) {
   FontFamily family(L"Segoe UI");
-  Font font(&family, (REAL)a.width, a.bold ? FontStyleBold : FontStyleRegular, UnitPixel);
+  Font font(&family, (REAL)a.width, a.fontStyle, UnitPixel);
   StringFormat fmt(StringFormat::GenericTypographic());
   TextFormat(fmt);
   SolidBrush brush(ToColor(a.color));
@@ -438,10 +441,47 @@ static std::unique_ptr<Bitmap> Crop(Overlay* s) {
 
 // --- Edicion de texto ----------------------------------------------------
 
+static int StyleFromSettings() {
+  return (gSettings.textBold ? FontStyleBold : 0) | (gSettings.textItalic ? FontStyleItalic : 0) | (gSettings.textUnderline ? FontStyleUnderline : 0);
+}
+
+static void StoreStyleInSettings(int style) {
+  gSettings.textBold = (style & FontStyleBold) != 0;
+  gSettings.textItalic = (style & FontStyleItalic) != 0;
+  gSettings.textUnderline = (style & FontStyleUnderline) != 0;
+  SaveSettings();
+}
+
+static Annotation* SelectedText(Overlay* s) {
+  if (s->selected < 0 || s->selected >= (int)s->items.size() || s->items[s->selected].kind != Kind::Text) return nullptr;
+  return &s->items[s->selected];
+}
+
+// Afecta al texto que se escribe o al seleccionado; sin ninguno, a los textos siguientes.
+static void ToggleTextStyle(HWND h, Overlay* s, int bit) {
+  int style;
+  if (s->editing) {
+    style = s->editStyle ^= bit;
+    s->caretOn = true;
+  } else if (SelectedText(s)) {
+    PushUndo(s);
+    Annotation* text = SelectedText(s);
+    style = text->fontStyle ^= bit;
+    Graphics g(s->backDC);
+    g.SetTextRenderingHint(TextRenderingHintAntiAlias);
+    MeasureAnnotationText(g, *text);
+  } else {
+    style = StyleFromSettings() ^ bit;
+  }
+  StoreStyleInSettings(style);
+  Repaint(h);
+}
+
 static void BeginEdit(HWND h, Overlay* s, POINT at, int index) {
   s->editing = true;
   s->caretOn = true;
   s->editIndex = index;
+  s->editStyle = index >= 0 ? s->items[index].fontStyle : StyleFromSettings();
   s->edit = {};
   s->editAt = at;
   s->selected = -1;
@@ -472,7 +512,7 @@ static void CommitEdit(HWND h, Overlay* s) {
   const POINT at = s->editAt;
   EndEdit(h, s);
   if (index >= 0) {
-    if (text == s->items[index].text) {
+    if (text == s->items[index].text && s->editStyle == s->items[index].fontStyle) {
       s->selected = index;
     } else {
       PushUndo(s);
@@ -480,6 +520,7 @@ static void CommitEdit(HWND h, Overlay* s) {
         s->items.erase(s->items.begin() + index);
       } else {
         s->items[index].text = text;
+        s->items[index].fontStyle = s->editStyle;
         Graphics g(s->backDC);
         g.SetTextRenderingHint(TextRenderingHintAntiAlias);
         MeasureAnnotationText(g, s->items[index]);
@@ -493,7 +534,7 @@ static void CommitEdit(HWND h, Overlay* s) {
     a.pts = {at};
     a.color = s->color;
     a.width = Sc(s, gSettings.textSize);
-    a.bold = gSettings.textBold;
+    a.fontStyle = s->editStyle;
     a.text = text;
     Graphics g(s->backDC);
     g.SetTextRenderingHint(TextRenderingHintAntiAlias);
@@ -640,12 +681,16 @@ static void ShowSizeMenu(HWND h, Overlay* s) {
     case Action::Number: choices = numbers; setting = &gSettings.numberSize; break;
     default: choices = strokes; setting = &gSettings.thickness; break;
   }
-  enum { ID_BOLD = 10, ID_RESET1, ID_RESET5, ID_RESET10 };
+  enum { ID_BOLD = 10, ID_ITALIC, ID_UNDERLINE, ID_RESET1, ID_RESET5, ID_RESET10 };
   HMENU q = CreatePopupMenu();
   for (int i = 0; i < 3; i++) AppendMenuW(q, MF_STRING | (choices[i].value == *setting ? MF_CHECKED : 0), i + 1, choices[i].name);
   if (s->tool == Action::Text) {
     AppendMenuW(q, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(q, MF_STRING | (gSettings.textBold ? MF_CHECKED : 0), ID_BOLD, L"Texto en negrita");
+    const Annotation* text = SelectedText(s);
+    const int style = text ? text->fontStyle : StyleFromSettings();
+    AppendMenuW(q, MF_STRING | ((style & FontStyleBold) ? MF_CHECKED : 0), ID_BOLD, L"Negrita\tCtrl+B");
+    AppendMenuW(q, MF_STRING | ((style & FontStyleItalic) ? MF_CHECKED : 0), ID_ITALIC, L"Cursiva\tCtrl+I");
+    AppendMenuW(q, MF_STRING | ((style & FontStyleUnderline) ? MF_CHECKED : 0), ID_UNDERLINE, L"Subrayado\tCtrl+U");
   } else if (s->tool == Action::Number) {
     AppendMenuW(q, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(q, MF_STRING, ID_RESET1, L"Reiniciar numeración en 1");
@@ -656,7 +701,9 @@ static void ShowSizeMenu(HWND h, Overlay* s) {
   const int c = TrackPopupMenu(q, TPM_RETURNCMD, p.x, p.y, 0, h, nullptr);
   DestroyMenu(q);
   if (c >= 1 && c <= 3) *setting = choices[c - 1].value;
-  else if (c == ID_BOLD) gSettings.textBold = !gSettings.textBold;
+  else if (c == ID_BOLD) ToggleTextStyle(h, s, FontStyleBold);
+  else if (c == ID_ITALIC) ToggleTextStyle(h, s, FontStyleItalic);
+  else if (c == ID_UNDERLINE) ToggleTextStyle(h, s, FontStyleUnderline);
   else if (c >= ID_RESET1 && c <= ID_RESET10) s->numberStart = s->nextNumber = c == ID_RESET1 ? 1 : c == ID_RESET5 ? 5 : 10;
   if (c) SaveSettings();
   Repaint(h);
@@ -881,7 +928,7 @@ static void PaintLabel(Graphics& g, const Overlay* s, const wstring& text, RectF
 
 static void PaintTooltip(Graphics& g, const Overlay* s) {
   if (s->hover == Action::None) return;
-  const wstring name = ActionName(s->hover);
+  const wstring name = s->hover == Action::SizeMenu && s->tool == Action::Text ? L"Tamaño y formato" : ActionName(s->hover);
   const RECT b = ButtonRect(s, s->hover);
   const RECT monitor = MonitorRectAt(s, {b.left, b.top});
   const REAL w = (REAL)Sc(s, 12 + 6.2 * name.size()), height = (REAL)Sc(s, 25), gap = (REAL)Sc(s, 6);
@@ -935,7 +982,7 @@ static void PaintCaret(Graphics& g, const Overlay* s) {
   FontFamily family(L"Segoe UI");
   const int px = Sc(s, gSettings.textSize);
   const Annotation* source = s->editIndex >= 0 ? &s->items[s->editIndex] : nullptr;
-  Font font(&family, (REAL)(source ? source->width : px), (source ? source->bold : gSettings.textBold) ? FontStyleBold : FontStyleRegular, UnitPixel);
+  Font font(&family, (REAL)(source ? source->width : px), s->editStyle, UnitPixel);
   const wstring before = s->edit.text.substr(0, s->edit.caret);
   const auto lines = SplitLines(before);
   const REAL h = font.GetHeight(&g);
@@ -978,7 +1025,7 @@ static void PaintOverlay(Overlay* s) {
       const Annotation* source = s->editIndex >= 0 ? &s->items[s->editIndex] : nullptr;
       preview.color = source ? source->color : s->color;
       preview.width = source ? source->width : Sc(s, gSettings.textSize);
-      preview.bold = source ? source->bold : gSettings.textBold;
+      preview.fontStyle = s->editStyle;
       preview.text = s->edit.text;
       DrawAnnotationText(g, preview);
       if (s->caretOn) PaintCaret(g, s);
@@ -1283,6 +1330,15 @@ static void OnEditKey(HWND h, Overlay* s, WPARAM key) {
         wstring text = ClipboardText(h);
         text.erase(std::remove(text.begin(), text.end(), L'\r'), text.end());
         s->edit.Insert(text);
+      } else if (CtrlDown() && key == 'B') {
+        ToggleTextStyle(h, s, FontStyleBold);
+        return;
+      } else if (CtrlDown() && key == 'I') {
+        ToggleTextStyle(h, s, FontStyleItalic);
+        return;
+      } else if (CtrlDown() && key == 'U') {
+        ToggleTextStyle(h, s, FontStyleUnderline);
+        return;
       } else if (CtrlDown() && key == 'C') {
         DoAction(h, s, Action::Copy);
         return;
@@ -1321,7 +1377,10 @@ static void OnKeyDown(HWND h, Overlay* s, WPARAM key, LPARAM l) {
     return;
   }
   if (s->phase != Phase::Editing) return;
-  if (ctrl && key == 'C') DoAction(h, s, Action::Copy);
+  if (ctrl && key == 'B') ToggleTextStyle(h, s, FontStyleBold);
+  else if (ctrl && key == 'I') ToggleTextStyle(h, s, FontStyleItalic);
+  else if (ctrl && key == 'U') ToggleTextStyle(h, s, FontStyleUnderline);
+  else if (ctrl && key == 'C') DoAction(h, s, Action::Copy);
   else if (ctrl && key == 'S') DoAction(h, s, Action::Save);
   else if (ctrl && key == 'Z') DoAction(h, s, ShiftDown() ? Action::Redo : Action::Undo);
   else if (ctrl && key == 'Y') DoAction(h, s, Action::Redo);
