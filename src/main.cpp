@@ -26,6 +26,7 @@ static HWND gLastForeground;
 static RECT gLastSelection;
 static bool gHasLastSelection;
 static int gTrayRetries;
+static bool gHotkeyBusy;
 
 void RememberSelection(const RECT& screenRect) {
   gLastSelection = screenRect;
@@ -54,6 +55,15 @@ void ShowTip(const wchar_t* text) {
   wcsncpy(n.szInfo, text, 255);
   n.dwInfoFlags = NIIF_INFO | NIIF_NOSOUND;
   Shell_NotifyIconW(NIM_MODIFY, &n);
+}
+
+// Sin icono en la bandeja el globo se pierde: el aviso espera a que el icono exista.
+static const wchar_t* gHotkeyWarning;
+static void FlushHotkeyWarning() {
+  if (gHotkeyWarning) {
+    ShowTip(gHotkeyWarning);
+    gHotkeyWarning = nullptr;
+  }
 }
 
 static void RequestCapture(HWND h, CaptureMode mode) {
@@ -109,18 +119,22 @@ static void ShowTrayMenu(HWND h) {
 
 static LRESULT CALLBACK HostProc(HWND h, UINT m, WPARAM w, LPARAM l) {
   if (gTaskbarCreated && m == gTaskbarCreated) {
-    AddTray(h);
+    if (AddTray(h)) FlushHotkeyWarning();
     return 0;
   }
   switch (m) {
     case WM_CREATE: {
       gHost = h;
-      if (!AddTray(h)) SetTimer(h, TIMER_TRAY_RETRY, 2000, nullptr);  // al iniciar sesion el shell puede no estar listo
+      const bool tray = AddTray(h);
+      if (!tray) SetTimer(h, TIMER_TRAY_RETRY, 2000, nullptr);  // al iniciar sesion el shell puede no estar listo
       const bool primary = RegisterHotKey(h, HOTKEY_AREA, MOD_NOREPEAT, VK_SNAPSHOT);
-      RegisterHotKey(h, HOTKEY_AREA_ALT, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'S');
+      const bool alt = RegisterHotKey(h, HOTKEY_AREA_ALT, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'S');
       RegisterHotKey(h, HOTKEY_WINDOW, MOD_ALT | MOD_NOREPEAT, VK_SNAPSHOT);
       RegisterHotKey(h, HOTKEY_REPEAT, MOD_SHIFT | MOD_NOREPEAT, VK_SNAPSHOT);
-      if (!primary) ShowTip(L"Otro programa está usando Impr Pant. Usa Ctrl+Mayús+S o cierra ese programa.");
+      gHotkeyBusy = !primary;
+      if (!primary) gHotkeyWarning = alt ? L"Otro programa está usando Impr Pant. Usa Ctrl+Mayús+S o cierra ese programa."
+                                         : L"Otro programa está usando Impr Pant y Ctrl+Mayús+S. Captura desde el menú de la bandeja o cierra ese programa.";
+      if (tray) FlushHotkeyWarning();
       return 0;
     }
     case WM_HOTKEY:
@@ -133,8 +147,10 @@ static LRESULT CALLBACK HostProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (w == TIMER_CAPTURE) {
         KillTimer(h, TIMER_CAPTURE);
         OpenOverlay(gPendingMode, gLastForeground, gHasLastSelection ? &gLastSelection : nullptr);
-      } else if (w == TIMER_TRAY_RETRY && (AddTray(h) || ++gTrayRetries >= kTrayRetries)) {
-        KillTimer(h, TIMER_TRAY_RETRY);
+      } else if (w == TIMER_TRAY_RETRY) {
+        const bool ok = AddTray(h);
+        if (ok) FlushHotkeyWarning();
+        if (ok || ++gTrayRetries >= kTrayRetries) KillTimer(h, TIMER_TRAY_RETRY);
       }
       return 0;
     case WM_TRAY:
@@ -207,8 +223,12 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, LPWSTR cmd, int) {
   // no la ve FindWindow y no puede pasar a primer plano para cerrar bien el menu.
   CreateWindowExW(WS_EX_TOOLWINDOW, L"CaptureCleanHost", L"CaptureClean", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, hi, nullptr);
   HWINEVENTHOOK hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, OnForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-  if (installed) ShowTip(L"CaptureClean está activo y listo para capturar");
-  else if (!background) ShowTip(L"CaptureClean está activo. Pulsa Impr Pant para capturar.");
+  // La ventana activa al arrancar no genera evento: sin esto, Alt+Impr Pant no tendria ventana.
+  if (HWND fg = GetForegroundWindow()) OnForegroundChanged(nullptr, 0, fg, 0, 0, 0, 0);
+  if (!gHotkeyBusy) {
+    if (installed) ShowTip(L"CaptureClean está activo y listo para capturar");
+    else if (!background) ShowTip(L"CaptureClean está activo. Pulsa Impr Pant para capturar.");
+  }
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0) > 0) {

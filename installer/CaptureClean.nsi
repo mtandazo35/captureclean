@@ -174,8 +174,9 @@ Function .onInit
   ${EndIf}
 
   ; Las versiones anteriores no guardaban InstallLocation: la carpeta sale de DisplayIcon, que
-  ; ademas podia llevar barras dobles. /D (carpeta distinta de la de serie) tiene prioridad.
-  ${If} $INSTDIR == "${DEFAULT_DIR}"
+  ; ademas podia llevar barras dobles. /D solo se aplica si no hay otra instalacion.
+  ReadRegStr $2 HKCU "${UNINST_KEY}" "InstallLocation"
+  ${If} $2 == ""
     ReadRegStr $0 HKCU "${UNINST_KEY}" "DisplayIcon"
     ${If} $0 != ""
       ${GetParent} $0 $0
@@ -184,15 +185,32 @@ Function .onInit
       ${If} $1 == "\"
         StrCpy $0 $0 -1
       ${EndIf}
-      ${If} ${FileExists} "$0\CaptureClean.exe"
+      StrCpy $2 $0
+      ${If} $INSTDIR == "${DEFAULT_DIR}"
+      ${AndIf} ${FileExists} "$0\CaptureClean.exe"
         StrCpy $INSTDIR $0
       ${EndIf}
     ${EndIf}
+  ${EndIf}
+  ${If} $2 != ""
+  ${AndIf} $2 != $INSTDIR
+  ${AndIf} ${FileExists} "$2\CaptureClean.exe"
+    MessageBox MB_OK|MB_ICONSTOP "Ya hay una instalación en $2. Desinstálala antes de elegir otra carpeta." /SD IDOK
+    SetErrorLevel 4
+    Quit
   ${EndIf}
 
   ReadRegStr $OldVersion HKCU "${UNINST_KEY}" "DisplayVersion"
   ${IfNot} ${FileExists} "$INSTDIR\CaptureClean.exe"
     StrCpy $OldVersion ""
+  ${EndIf}
+
+  ; La casilla muestra lo guardado, tambien al reinstalar tras conservar las preferencias.
+  ClearErrors
+  ReadRegDWORD $0 HKCU "${APP_KEY}" "AutoStartEnabled"
+  ${IfNot} ${Errors}
+  ${AndIf} $0 == 0
+    !insertmacro UnselectSection ${SEC_AUTOSTART}
   ${EndIf}
 
   ${If} $OldVersion == ""
@@ -211,15 +229,9 @@ Function .onInit
     StrCpy $WelcomeText "CaptureClean ${VERSION} ya está instalado. Este asistente volverá a instalarlo, conservando tus preferencias y tus capturas."
   ${EndIf}
 
-  ; Al actualizar, las casillas muestran lo que el usuario ya tenia.
+  ; Al actualizar, la casilla muestra lo que el usuario ya tenia.
   ${IfNot} ${FileExists} "$DESKTOP\CaptureClean.lnk"
     !insertmacro UnselectSection ${SEC_DESKTOP}
-  ${EndIf}
-  ClearErrors
-  ReadRegDWORD $0 HKCU "${APP_KEY}" "AutoStartEnabled"
-  ${IfNot} ${Errors}
-  ${AndIf} $0 == 0
-    !insertmacro UnselectSection ${SEC_AUTOSTART}
   ${EndIf}
 FunctionEnd
 

@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "logic.h"
 #include <shlobj.h>
+#include <cwchar>
 
 // Misma clave y mismos valores que las versiones 3.x, para conservar las preferencias.
 static const wchar_t* kKey = L"Software\\CaptureClean";
@@ -91,7 +92,19 @@ bool SetAutoStart(bool enabled) {
 }
 
 void SyncAutoStart() {
+  if (!ReadDword(L"AutoStartConfigured", 0)) {
+    SetAutoStart(true);
+    return;
+  }
+  if (!AutoStartEnabled()) return;
   // Tambien reescribe el valor si ya estaba activo: las 3.x lo guardaban sin --background.
-  const bool configured = ReadDword(L"AutoStartConfigured", 0) != 0;
-  if (!configured || AutoStartEnabled()) SetAutoStart(true);
+  // Solo si apunta a este ejecutable: una copia suelta no debe apropiarse del inicio con Windows.
+  wchar_t current[32768], path[32768];
+  DWORD size = sizeof(current);
+  if (RegGetValueW(HKEY_CURRENT_USER, kRunKey, kRunValue, RRF_RT_REG_SZ, nullptr, current, &size) != ERROR_SUCCESS) return;
+  const DWORD length = GetModuleFileNameW(nullptr, path, 32768);
+  if (!length) return;
+  CharLowerBuffW(current, (DWORD)wcslen(current));
+  CharLowerBuffW(path, length);
+  if (wcsstr(current, path)) SetAutoStart(true);
 }

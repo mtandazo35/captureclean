@@ -25,7 +25,7 @@ Las preferencias (bandeja → *Preferencias…*) se guardan en `HKCU\Software\Ca
 
 Ejecuta `CaptureClean-Setup-<versión>.exe`. No necesita permisos de administrador y requiere Windows 10 1703 o posterior de 64 bits. Para comprobar que el archivo no se alteró, compara `certutil -hashfile CaptureClean-Setup-<versión>.exe SHA256` con el archivo `.sha256` que lo acompaña.
 
-Instalación desatendida: `/S` silenciosa, `/ABRIR` abre la aplicación al terminar, `/D=C:\carpeta` elige la carpeta (siempre al final y sin comillas). Para desinstalar en silencio: `Uninstall.exe /S`, que conserva las preferencias.
+Instalación desatendida: `/S` silenciosa, `/ABRIR` abre la aplicación al terminar, `/D=C:\carpeta` elige la carpeta (siempre al final y sin comillas), y solo se aplica si no hay otra instalación. Para desinstalar en silencio: `Uninstall.exe /S`, que conserva las preferencias.
 
 ## Compilar
 

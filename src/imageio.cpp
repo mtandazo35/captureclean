@@ -116,8 +116,11 @@ SaveResult SaveWithDialog(HWND owner, Bitmap* image) {
 
   std::wstring chosen = path.data();
   // La extension escrita manda sobre el filtro: si no es de imagen, se anade la del filtro.
-  if (!logic::HasExtension(chosen, L"png") && !logic::HasExtension(chosen, L"jpg") && !logic::HasExtension(chosen, L"jpeg"))
+  if (!logic::HasExtension(chosen, L"png") && !logic::HasExtension(chosen, L"jpg") && !logic::HasExtension(chosen, L"jpeg")) {
     chosen += f.nFilterIndex == 2 ? L".jpg" : L".png";
+    // El dialogo solo confirmo el nombre sin esta extension.
+    if (GetFileAttributesW(chosen.c_str()) != INVALID_FILE_ATTRIBUTES && MessageBoxW(owner, (chosen + L"\nya existe. ¿Quieres reemplazarlo?").c_str(), L"CaptureClean", MB_YESNO | MB_ICONWARNING) != IDYES) return SaveResult::Cancelled;
+  }
   if (!WriteImage(image, chosen)) return SaveResult::Failed;
   gSettings.lastSaveFolder = FolderOf(chosen);
   SaveSettings();

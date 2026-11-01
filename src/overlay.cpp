@@ -43,6 +43,11 @@ struct Annotation {
 enum class Phase { Selecting, Editing };
 enum class Drag { None, Create, ResizeSelection, Draw, MoveObject };
 
+struct UndoEntry {
+  std::vector<Annotation> items;
+  int nextNumber;
+};
+
 struct Overlay {
   int W = 0, H = 0;
   POINT origin{};  // esquina del escritorio virtual en coordenadas de pantalla
@@ -63,7 +68,7 @@ struct Overlay {
   Action tool = Action::Pencil, hover = Action::None;
   COLORREF color = 0;
   std::vector<Annotation> items;
-  std::vector<std::vector<Annotation>> undo, redo;
+  std::vector<UndoEntry> undo, redo;
   Annotation draft;
   int selected = -1;
   bool movedOnce = false, dirty = false;
@@ -328,16 +333,34 @@ static void RecalcNextNumber(Overlay* s) {
 
 static void PushUndo(Overlay* s) {
   if ((int)s->undo.size() >= kMaxUndo) s->undo.erase(s->undo.begin());
-  s->undo.push_back(s->items);
+  s->undo.push_back({s->items, s->nextNumber});
   s->redo.clear();
   s->dirty = true;
 }
 
-static void MoveItem(const Overlay* s, Annotation& a, int dx, int dy) {
-  // Sin salir de la seleccion, salvo que el objeto ya sea mayor que ella.
+static POINT ClampMove(const Overlay* s, const Annotation& a, int dx, int dy) {
+  // Sin salir de la seleccion, salvo que el objeto ya sea mayor que ella. El 0 siempre cabe en
+  // el rango: el margen del trazo puede dejar el objeto un poco fuera sin que deba saltar.
   const RECT b = Bounds(a);
-  if (Width(b) <= Width(s->sel)) dx = std::clamp<int>(dx, s->sel.left - b.left, s->sel.right - b.right);
-  if (Height(b) <= Height(s->sel)) dy = std::clamp<int>(dy, s->sel.top - b.top, s->sel.bottom - b.bottom);
+  if (Width(b) <= Width(s->sel)) dx = std::clamp<int>(dx, std::min<int>(0, s->sel.left - b.left), std::max<int>(0, s->sel.right - b.right));
+  if (Height(b) <= Height(s->sel)) dy = std::clamp<int>(dy, std::min<int>(0, s->sel.top - b.top), std::max<int>(0, s->sel.bottom - b.bottom));
+  return {dx, dy};
+}
+
+static POINT MoveItem(const Overlay* s, Annotation& a, int dx, int dy) {
+  const POINT d = ClampMove(s, a, dx, dy);
+  for (POINT& p : a.pts) {
+    p.x += d.x;
+    p.y += d.y;
+  }
+  return d;
+}
+
+// Mete dentro de la seleccion un objeto recien creado, salvo que sea mayor que ella.
+static void FitItem(const Overlay* s, Annotation& a) {
+  const RECT b = Bounds(a);
+  const int dx = Width(b) <= Width(s->sel) ? std::clamp<int>(0, s->sel.left - b.left, s->sel.right - b.right) : 0;
+  const int dy = Height(b) <= Height(s->sel) ? std::clamp<int>(0, s->sel.top - b.top, s->sel.bottom - b.bottom) : 0;
   for (POINT& p : a.pts) {
     p.x += dx;
     p.y += dy;
@@ -475,7 +498,6 @@ static void CommitEdit(HWND h, Overlay* s) {
     Graphics g(s->backDC);
     g.SetTextRenderingHint(TextRenderingHintAntiAlias);
     MeasureAnnotationText(g, a);
-    MoveItem(s, a, 0, 0);
     s->items.push_back(std::move(a));
     s->selected = (int)s->items.size() - 1;
   }
@@ -545,14 +567,16 @@ static void CopyCurrent(HWND h, Overlay* s) {
   } else {
     ShowTip(L"Captura copiada al portapapeles");
   }
+  if (!IsWindow(h)) return;
   Close(h, s);
 }
 
 static void RequestClose(HWND h, Overlay* s) {
   if (s->phase == Phase::Editing && s->dirty && gSettings.confirmOnEscape) {
     const int answer = MessageBoxW(h, L"La captura tiene cambios sin guardar.\n¿Deseas guardarlos antes de cerrar?", L"CaptureClean", MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (!IsWindow(h)) return;  // el instalador puede cerrar el programa con la pregunta abierta
     if (answer == IDCANCEL) return;
-    if (answer == IDYES && !SaveCurrent(h, s)) return;
+    if (answer == IDYES && (!SaveCurrent(h, s) || !IsWindow(h))) return;
   }
   Close(h, s);
 }
@@ -561,7 +585,7 @@ static void SetColor(HWND h, Overlay* s, COLORREF color) {
   s->color = color;
   gSettings.color = color;
   SaveSettings();
-  if (s->selected >= 0 && s->selected < (int)s->items.size() && s->items[s->selected].kind != Kind::Pixelate) {
+  if (s->selected >= 0 && s->selected < (int)s->items.size() && s->items[s->selected].kind != Kind::Pixelate && s->items[s->selected].color != color) {
     PushUndo(s);
     s->items[s->selected].color = color;
   }
@@ -656,18 +680,18 @@ static void DoAction(HWND h, Overlay* s, Action a) {
       auto& from = a == Action::Undo ? s->undo : s->redo;
       auto& to = a == Action::Undo ? s->redo : s->undo;
       if (from.empty()) return;
-      to.push_back(std::move(s->items));
-      s->items = std::move(from.back());
+      to.push_back({std::move(s->items), s->nextNumber});
+      s->items = std::move(from.back().items);
+      s->nextNumber = from.back().nextNumber;
       from.pop_back();
       s->selected = -1;
       s->dirty = true;
-      RecalcNextNumber(s);
       Repaint(h);
       return;
     }
     case Action::Copy: CopyCurrent(h, s); return;
-    case Action::Save: if (SaveCurrent(h, s)) Close(h, s); return;
-    case Action::Close: Close(h, s); return;
+    case Action::Save: if (SaveCurrent(h, s) && IsWindow(h)) Close(h, s); return;
+    case Action::Close: RequestClose(h, s); return;
     default: return;
   }
 }
@@ -988,7 +1012,8 @@ static void PaintOverlay(Overlay* s) {
   const bool showSize = hasRect && (s->drag == Drag::Create || s->drag == Drag::ResizeSelection || (s->phase == Phase::Selecting && s->hoverTarget >= 0));
   if (showSize) {
     const REAL w = (REAL)Sc(s, 104), lh = (REAL)Sc(s, 23);
-    PaintLabel(g, s, std::to_wstring(Width(r)) + L" × " + std::to_wstring(Height(r)), RectF((REAL)r.left, std::max<REAL>(3, r.top - lh - 4), w, lh));
+    const RECT mon = MonitorRectAt(s, {r.left, r.top});
+    PaintLabel(g, s, std::to_wstring(Width(r)) + L" × " + std::to_wstring(Height(r)), RectF((REAL)r.left, std::max<REAL>((REAL)mon.top + 3, r.top - lh - 4), w, lh));
   }
   if (s->phase == Phase::Editing) {
     PaintBar(g, s, s->bars.tools, kToolActions, kToolCount, true);
@@ -1013,7 +1038,14 @@ static void BeginDraw(HWND h, Overlay* s, POINT p) {
     case Action::Arrow: a.kind = Kind::Arrow; a.pts.push_back(p); break;
     case Action::Rectangle: a.kind = Kind::Rectangle; a.pts.push_back(p); break;
     case Action::Ellipse: a.kind = Kind::Ellipse; a.pts.push_back(p); break;
-    case Action::Pixelate: a.kind = Kind::Pixelate; a.width = Sc(s, gSettings.pixelBlock); a.pts.push_back(p); break;
+    case Action::Pixelate:
+      a.kind = Kind::Pixelate;
+      a.width = Sc(s, gSettings.pixelBlock);
+      a.pts.push_back(p);
+      // El rectangulo tiene fin exclusivo: empezar pegado al borde debe cubrir tambien ese ultimo pixel.
+      if (p.x >= s->sel.right - 1) a.pts[0].x = s->sel.right;
+      if (p.y >= s->sel.bottom - 1) a.pts[0].y = s->sel.bottom;
+      break;
     default: return;
   }
   s->draft = std::move(a);
@@ -1077,7 +1109,7 @@ static void OnLeftDown(HWND h, Overlay* s, POINT p) {
     a.color = s->color;
     a.width = Sc(s, gSettings.numberSize);
     a.number = s->nextNumber++;
-    MoveItem(s, a, 0, 0);
+    FitItem(s, a);
     s->items.push_back(std::move(a));
     Repaint(h);
     return;
@@ -1100,17 +1132,26 @@ static void OnMouseMove(HWND h, Overlay* s, POINT p) {
       return;
     case Drag::MoveObject:
       if ((p.x != s->last.x || p.y != s->last.y) && s->selected >= 0 && s->selected < (int)s->items.size()) {
-        if (!s->movedOnce) {
-          PushUndo(s);  // solo si de verdad se movio: un clic no gasta un paso de Deshacer
-          s->movedOnce = true;
+        const POINT d = ClampMove(s, s->items[s->selected], p.x - s->last.x, p.y - s->last.y);
+        if (d.x || d.y) {
+          if (!s->movedOnce) {
+            PushUndo(s);  // solo si de verdad se movio: un clic no gasta un paso de Deshacer
+            s->movedOnce = true;
+          }
+          MoveItem(s, s->items[s->selected], d.x, d.y);
+          s->last.x += d.x;
+          s->last.y += d.y;
+          Repaint(h);
         }
-        MoveItem(s, s->items[s->selected], p.x - s->last.x, p.y - s->last.y);
-        s->last = p;
-        Repaint(h);
       }
       return;
     case Drag::Draw: {
-      const POINT q = logic::ClampPoint(p, s->sel);
+      POINT q = logic::ClampPoint(p, s->sel);
+      if (s->draft.kind == Kind::Pixelate) {
+        // Pixelar usa fin exclusivo: pegado al borde debe cubrir tambien la ultima fila y columna.
+        if (p.x >= s->sel.right - 1) q.x = s->sel.right;
+        if (p.y >= s->sel.bottom - 1) q.y = s->sel.bottom;
+      }
       if (s->draft.kind == Kind::Stroke || s->draft.kind == Kind::Highlight) s->draft.pts.push_back(q);
       else s->draft.pts[1] = q;
       Repaint(h);
@@ -1152,7 +1193,10 @@ static void OnLeftUp(HWND h, Overlay* s, POINT p) {
         Repaint(h);  // arrastre accidental: se sigue seleccionando, sin cerrar la captura
         return;
       } else {
-        // El raton nunca llega a W ni a H: pegado al borde, la seleccion alcanza el borde real.
+        // El raton nunca llega al borde exclusivo de un monitor: pegado a el, la seleccion lo alcanza.
+        const RECT mon = MonitorRectAt(s, p);
+        if (r.right >= mon.right - 1 && r.right <= mon.right) r.right = mon.right;
+        if (r.bottom >= mon.bottom - 1 && r.bottom <= mon.bottom) r.bottom = mon.bottom;
         if (r.right >= s->W - 1) r.right = s->W;
         if (r.bottom >= s->H - 1) r.bottom = s->H;
       }
@@ -1193,6 +1237,7 @@ static void OnRightDown(HWND h, Overlay* s) {
 // Con CS_DBLCLKS el segundo clic rapido llega por aqui: si no es para reeditar un texto,
 // cuenta como un clic normal (numerar seguido, Deshacer dos veces...).
 static void OnDoubleClick(HWND h, Overlay* s, POINT p) {
+  if (s->editing && s->editIndex < 0 && s->edit.text.empty() && HitButton(s, p) == Action::None && Inside(s->sel, p)) return;
   if (s->phase == Phase::Editing && !s->editing && (s->tool == Action::Select || s->tool == Action::Text) && HitButton(s, p) == Action::None) {
     const int i = HitText(s, p);
     if (i >= 0) {
@@ -1203,13 +1248,16 @@ static void OnDoubleClick(HWND h, Overlay* s, POINT p) {
   OnLeftDown(h, s, p);
 }
 
-static void Nudge(HWND h, Overlay* s, int dx, int dy) {
+static void Nudge(HWND h, Overlay* s, int dx, int dy, bool repeat) {
   const int step = ShiftDown() ? 10 : 1;
   dx *= step;
   dy *= step;
   if (s->selected >= 0 && s->selected < (int)s->items.size()) {
-    PushUndo(s);
-    MoveItem(s, s->items[s->selected], dx, dy);
+    Annotation& a = s->items[s->selected];
+    const POINT d = ClampMove(s, a, dx, dy);
+    if (!d.x && !d.y) return;
+    if (!repeat) PushUndo(s);
+    MoveItem(s, a, d.x, d.y);
   } else {
     s->sel = logic::ApplyGrip(s->sel, Grip::Move, dx, dy, RECT{0, 0, s->W, s->H}, kMinSelection);
     UpdateLayout(s);
@@ -1249,7 +1297,7 @@ static void OnEditKey(HWND h, Overlay* s, WPARAM key) {
   Repaint(h);
 }
 
-static void OnKeyDown(HWND h, Overlay* s, WPARAM key) {
+static void OnKeyDown(HWND h, Overlay* s, WPARAM key, LPARAM l) {
   if (s->editing) {
     OnEditKey(h, s, key);
     return;
@@ -1278,16 +1326,18 @@ static void OnKeyDown(HWND h, Overlay* s, WPARAM key) {
   else if (ctrl && key == 'Z') DoAction(h, s, ShiftDown() ? Action::Redo : Action::Undo);
   else if (ctrl && key == 'Y') DoAction(h, s, Action::Redo);
   else if (key == VK_DELETE && s->selected >= 0 && s->selected < (int)s->items.size()) {
+    const bool wasNumber = s->items[s->selected].kind == Kind::Number;
     PushUndo(s);
     s->items.erase(s->items.begin() + s->selected);
     s->selected = -1;
-    RecalcNextNumber(s);
+    if (wasNumber) RecalcNextNumber(s);
     Repaint(h);
   } else if (s->drag == Drag::None) {
-    if (key == VK_LEFT) Nudge(h, s, -1, 0);
-    else if (key == VK_RIGHT) Nudge(h, s, 1, 0);
-    else if (key == VK_UP) Nudge(h, s, 0, -1);
-    else if (key == VK_DOWN) Nudge(h, s, 0, 1);
+    const bool repeat = (l & (1 << 30)) != 0;
+    if (key == VK_LEFT) Nudge(h, s, -1, 0, repeat);
+    else if (key == VK_RIGHT) Nudge(h, s, 1, 0, repeat);
+    else if (key == VK_UP) Nudge(h, s, 0, -1, repeat);
+    else if (key == VK_DOWN) Nudge(h, s, 0, 1, repeat);
   }
 }
 
@@ -1325,7 +1375,15 @@ LRESULT CALLBACK OverlayProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_LBUTTONUP: OnLeftUp(h, s, p); return 0;
     case WM_LBUTTONDBLCLK: OnDoubleClick(h, s, p); return 0;
     case WM_RBUTTONDOWN: OnRightDown(h, s); return 0;
-    case WM_KEYDOWN: OnKeyDown(h, s, w); return 0;
+    case WM_KEYDOWN: OnKeyDown(h, s, w, l); return 0;
+    case WM_CAPTURECHANGED:
+      // Un cuadro de mensaje puede quitar la captura en pleno arrastre: sin ella no llega el clic de soltar.
+      if (s->drag != Drag::None && (HWND)l != h) {
+        s->drag = Drag::None;
+        s->draft = {};
+        Repaint(h);
+      }
+      return 0;
     case WM_CHAR:
       if (s->editing && w >= 0x20 && w != 0x7F) {
         s->edit.Insert(wstring(1, (wchar_t)w));
