@@ -1,0 +1,50 @@
+name: build
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y mingw-w64 nsis
+      - run: bash build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*.exe
+
+  test:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Pruebas de logica
+        run: dist\unit.exe
+      - name: Prueba de interfaz
+        run: dist\ui_test.exe "$env:GITHUB_WORKSPACE\dist\CaptureClean.exe" "$env:GITHUB_WORKSPACE\capturas"
+      - name: Instalador
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\CaptureClean-Setup-*.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList '/S' -Wait
+          $exe = "$env:LOCALAPPDATA\CaptureClean\CaptureClean.exe"
+          if (-not (Test-Path $exe)) { throw 'No se instalo el ejecutable' }
+          Start-Sleep 2
+          if (-not (Get-Process CaptureClean -ErrorAction SilentlyContinue)) { throw 'El instalador no abrio la aplicacion' }
+          $icon = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CaptureClean').DisplayIcon
+          if ($icon -match '\\\\') { throw "Barras dobles en el registro: $icon" }
+          Stop-Process -Name CaptureClean -Force
+          Start-Process "$env:LOCALAPPDATA\CaptureClean\Uninstall.exe" -ArgumentList '/S' -Wait
+          Start-Sleep 3
+          if (Test-Path $exe) { throw 'El desinstalador no borro el ejecutable' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas
+          path: capturas/

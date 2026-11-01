@@ -1,38 +1,50 @@
 # CaptureClean
 
-Capturador local de pantalla para Windows x64 construido desde cero, sin componentes de Lightshot, publicidad ni conexión a servidores. La interfaz 2.10.1 mantiene selección y edición directamente sobre el escritorio, inspirada en el flujo de Lightshot pero con código propio.
+Capturador de pantalla para Windows 10/11 x64. Nativo (C++ y GDI+), sin publicidad, sin .NET y sin ningún código de red: nada sale del equipo.
 
-## Cliente
+## Uso
 
-- Al iniciar queda discretamente en la bandeja. Usa doble clic en bandeja, `Impr Pant` o `Ctrl+Shift+S` para capturar.
-- La pantalla se oscurece, muestra dimensiones y al soltar el ratón aparece una barra flotante integrada.
-- Editor directo y local: lápiz, línea, flecha, elipse, rectángulo, marcador translúcido, texto editable, selector de color y deshacer.
-- Copiar desde el botón o con `Ctrl+C` coloca la imagen en el portapapeles y cierra la captura.
-- Guardar desde el icono de disquete o con `Ctrl+S` abre el selector nativo, escribe un PNG y cierra la captura.
-- La imagen se publica como DIB estándar de Windows para pegarla en Paint, Word, navegadores y mensajería.
-- La versión aparece en el nombre de las descargas y en el menú de la bandeja para identificar con certeza el ejecutable activo.
-- Interfaz 2.7: barra translúcida estilo cristal, estados suaves, icono de copiar destacado, etiquetas al pasar el puntero y contorno de selección semitransparente.
-- Ajuste 2.7.1: barra reducida de 44 a 36 píxeles por botón, fondo más legible e iconos vectoriales reescalados y centrados.
-- Versión 2.8: icono multirresolución propio integrado en aplicación, bandeja, accesos directos, instalador y desinstalador; barra con degradado y botón Copiar destacado.
-- Versión 2.9: barra vertical marfil para dibujo y barra inferior separada con Copiar, Guardar y Cerrar; ambas se recolocan para no salirse de la pantalla.
-- Versión 2.9.1: corrige la primera captura sobredimensionada después de estar inactivo mediante DPI Per-Monitor V2 incrustado, límites físicos de monitores y estabilización del disparo de `Impr Pant`.
-- Versión 2.10.0: escritura directamente sobre la captura con fondo transparente; al terminar, el texto queda seleccionado y puede moverse arrastrándolo. Copiar y Guardar fusionan los objetos de texto en la imagen final y Deshacer restaura también sus posiciones.
-- Versión 2.10.1: conserva las nueve herramientas y las tres acciones sin interferencias; mover texto solo se activa con la herramienta Texto, permitiendo dibujar normalmente sobre textos con las demás herramientas.
-- Mantener `Ctrl` al terminar la selección copia y cierra directamente; `Ctrl+A` selecciona toda la pantalla y `Esc` o `Ctrl+X` cancela.
-- La bandeja queda reducida a **Nueva captura** y **Salir**.
-- La superposición usa doble búfer para eliminar el parpadeo al seleccionar o dibujar.
-- La imagen base se conserva en un contexto GDI y se copia directamente en cada cuadro; esto evita franjas y bloqueos en pantallas de alta resolución.
-- Todos los iconos de la barra se dibujan como vectores antialias y ya no dependen de símbolos instalados en Windows.
-- No contiene código de red, configuración de servidor ni subida de archivos.
-- El ejecutable es nativo y no requiere .NET.
+| Acción | Cómo |
+|---|---|
+| Capturar un área | `Impr Pant`, `Ctrl+Mayús+S`, doble clic en la bandeja o abrir el acceso directo |
+| Ventana activa | `Alt+Impr Pant` o menú de la bandeja |
+| Repetir la última zona | `Mayús+Impr Pant` o menú de la bandeja |
+| Escritorio completo | Menú de la bandeja, o `Ctrl+A` durante la captura |
+| Elegir una ventana o monitor | Pasar el puntero y hacer un clic, sin arrastrar |
 
-## Compilar el cliente
+Durante la captura:
+
+- **Selección:** se redimensiona con los tiradores, se mueve con *Seleccionar y mover* o con las flechas (`Mayús` = 10 px).
+- **Herramientas:** lápiz, línea, flecha, rectángulo, elipse, texto, resaltador, pixelar y numerar. Todo lo dibujado es un objeto que se puede mover o borrar (`Supr`) con *Seleccionar y mover*.
+- **Texto:** se escribe sobre la captura. `Intro` confirma, `Mayús+Intro` añade una línea, `Esc` cancela, `Ctrl+V` pega y el doble clic vuelve a editarlo.
+- **Teclas:** `Ctrl+C` copia y cierra, `Ctrl+S` guarda, `Ctrl+Z` deshace, `Ctrl+Y` rehace, `Esc` cierra. Mantener `Ctrl` al soltar la selección copia directamente.
+
+Las preferencias (bandeja → *Preferencias…*) se guardan en `HKCU\Software\CaptureClean`, la misma clave que las versiones 3.x, de modo que se conservan al actualizar.
+
+## Compilar
+
+Desde Linux, con `mingw-w64` y `nsis`:
 
 ```sh
-x86_64-w64-mingw32-g++ -std=c++17 -O2 -static -municode -mwindows client/CaptureCleanV2.cpp -o dist/CaptureClean.exe -lgdiplus -lcomdlg32
-makensis installer/CaptureClean.nsi
+bash build.sh
 ```
 
-## Alcance de validación
+El resultado queda en `dist/`. La versión se cambia en un solo sitio: `src/version.h`.
 
-Se verifica compilación reproducible, formato PE, contenido del instalador y ausencia de dependencias de red. Una certificación formal requiere firma de código y auditoría independiente en Windows 10/11.
+## Estructura
+
+| Archivo | Contenido |
+|---|---|
+| `src/overlay.cpp` | Ventana de captura: selección, objetos, dibujo y exportación |
+| `src/main.cpp` | Bandeja, atajos, instancia única |
+| `src/preferences.cpp`, `src/settings.cpp` | Ventana de preferencias y registro |
+| `src/imageio.cpp` | Portapapeles, PNG y JPEG |
+| `src/logic.h` | Lógica pura, sin ventanas |
+| `tests/unit.cpp` | Pruebas de `logic.h` |
+| `tests/ui_test.cpp` | Prueba de extremo a extremo: maneja la aplicación real con ratón y teclado |
+
+Las pruebas se ejecutan en CI (`.github/workflows/build.yml`) en un Windows desechable, porque cambian las preferencias y el portapapeles del equipo. `ui_test.exe` no debe ejecutarse en un equipo de uso diario.
+
+## Historia
+
+La base es el código de la versión 2.10.1. Las funciones de la 3.2.8, de la que no se conserva el código, se reimplementaron usando su ejecutable como referencia de comportamiento. Ver [CHANGELOG.md](CHANGELOG.md).

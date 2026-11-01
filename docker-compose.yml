@@ -1,9 +1,0 @@
-services:
-  captureclean:
-    build: ./server
-    restart: unless-stopped
-    ports: ["127.0.0.1:8188:8080"]
-    environment:
-      API_KEY: "CAMBIA_ESTA_CLAVE_LARGA_Y_ALEATORIA"
-      PUBLIC_BASE_URL: "https://capturas.tudominio.com"
-    volumes: ["./data:/data"]
