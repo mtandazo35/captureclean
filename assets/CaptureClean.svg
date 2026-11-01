@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="blue" x1="72" y1="48" x2="448" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19C3F4"/>
+      <stop offset="0.55" stop-color="#0798E4"/>
+      <stop offset="1" stop-color="#076DCA"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="140" y1="72" x2="350" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".20"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="20" y="20" width="472" height="472" rx="112" fill="url(#blue)"/>
+  <path d="M132 222v-62c0-16 12-28 28-28h62M290 132h62c16 0 28 12 28 28v62M380 290v62c0 16-12 28-28 28h-62M222 380h-62c-16 0-28-12-28-28v-62"
+        fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="62" fill="none" stroke="#fff" stroke-width="26"/>
+  <circle cx="256" cy="256" r="18" fill="#fff"/>
+  <path d="M94 92c94-70 246-60 330 32-82-45-220-49-330 18z" fill="url(#shine)"/>
+</svg>
