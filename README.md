@@ -1,5 +1,7 @@
 # CaptureClean
 
+**[⬇ Descargar el instalador](https://github.com/mtandazo35/captureclean/releases/latest)**
+
 Capturador de pantalla para Windows 10/11 x64. Nativo (C++ y GDI+), sin publicidad, sin .NET y sin ningún código de red: nada sale del equipo.
 
 ## Uso
