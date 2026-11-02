@@ -48,6 +48,18 @@ El instalador oficial sale siempre de GitHub Actions, no de un equipo personal:
 
 La etiqueta compila, pasa las pruebas y publica la Release con el instalador y su SHA256. Si falla algo, o la etiqueta no coincide con `src/version.h`, no se publica nada.
 
+## Política de firma de código
+
+**Estado:** las versiones publicadas todavía no están firmadas. La solicitud de firma a SignPath Foundation está en preparación.
+
+Una vez aprobada, se aplicará lo siguiente:
+
+- Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+- Committers and reviewers: [mtandazo35](https://github.com/mtandazo35)
+- Approvers: [mtandazo35](https://github.com/mtandazo35)
+
+**Privacidad:** This program will not transfer any information to other networked systems unless specifically requested.
+
 ## Estructura
 
 | Archivo | Contenido |
