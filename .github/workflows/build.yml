@@ -3,6 +3,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -85,3 +88,35 @@ jobs:
         with:
           name: capturas
           path: capturas/
+
+  # Solo con una etiqueta vX.Y.Z y solo si pasaron todas las pruebas.
+  release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: La etiqueta debe coincidir con src/version.h
+        run: |
+          VERSION=$(sed -n 's/^#define CC_VERSION_A "\(.*\)"/\1/p' src/version.h)
+          test "v$VERSION" = "$GITHUB_REF_NAME"
+          grep -q "^## $VERSION$" CHANGELOG.md
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publicar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist && sha256sum -c "CaptureClean-Setup-$VERSION.exe.sha256")
+          cp .github/release-header.md notas.md
+          echo "## Novedades" >> notas.md
+          echo >> notas.md
+          awk -v v="## $VERSION" '$0==v{on=1;next} /^## /{on=0} on' CHANGELOG.md >> notas.md
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/CaptureClean-Setup-$VERSION.exe" "dist/CaptureClean-Setup-$VERSION.exe.sha256" \
+            --verify-tag --title "CaptureClean $VERSION" --notes-file notas.md

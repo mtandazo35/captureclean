@@ -39,6 +39,15 @@ bash build.sh
 
 El resultado queda en `dist/`. La versión se cambia en un solo sitio: `src/version.h`.
 
+## Publicar una versión
+
+El instalador oficial sale siempre de GitHub Actions, no de un equipo personal:
+
+1. Cambia la versión en `src/version.h` y añade su sección en `CHANGELOG.md`.
+2. Haz commit y sube una etiqueta con esa versión: `git tag vX.Y.Z` y `git push origin main vX.Y.Z`.
+
+La etiqueta compila, pasa las pruebas y publica la Release con el instalador y su SHA256. Si falla algo, o la etiqueta no coincide con `src/version.h`, no se publica nada.
+
 ## Estructura
 
 | Archivo | Contenido |

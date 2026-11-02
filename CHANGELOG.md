@@ -1,5 +1,9 @@
 # Cambios
 
+## 3.3.3
+
+- El instalador oficial lo compila y lo publica GitHub Actions a partir del código de cada etiqueta, después de pasar las pruebas. La aplicación no cambia respecto a la 3.3.2.
+
 ## 3.3.2
 
 - El formato de texto pasa a una mini barra **B I U** junto al botón Texto. Queda abierta mientras se escribe, marca lo activo y no interrumpe la escritura. También aparece al seleccionar un texto.
