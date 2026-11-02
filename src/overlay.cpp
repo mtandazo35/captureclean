@@ -81,6 +81,7 @@ struct Overlay {
   int editStyle = 0;
 
   logic::BarLayout bars{};
+  RECT formatBar{};
   double scale = 1;
   int btn = kButtonSize;
 };
@@ -392,15 +393,23 @@ static void UpdateLayout(Overlay* s) {
   const RECT monitor = MonitorRectAt(s, center, &s->scale);
   s->btn = Sc(s, kButtonSize);
   s->bars = logic::PlaceToolbars(s->sel, monitor, s->btn, Sc(s, kToolbarGap), kToolCount, kBarCount);
+  s->formatBar = logic::PlaceFormatBar(s->bars.tools, s->bars.actions, monitor, s->btn, Sc(s, kToolbarGap), kTextToolIndex, kFormatCount);
+}
+
+static bool FormatBarVisible(const Overlay* s) {
+  return s->tool == Action::Text || (s->selected >= 0 && s->selected < (int)s->items.size() && s->items[s->selected].kind == Kind::Text);
 }
 
 static Action HitButton(const Overlay* s, POINT p) {
+  if (FormatBarVisible(s) && Inside(s->formatBar, p)) return kFormatActions[std::clamp<int>((p.x - s->formatBar.left) / s->btn, 0, kFormatCount - 1)];
   if (Inside(s->bars.tools, p)) return kToolActions[std::clamp<int>((p.y - s->bars.tools.top) / s->btn, 0, kToolCount - 1)];
   if (Inside(s->bars.actions, p)) return kBarActions[std::clamp<int>((p.x - s->bars.actions.left) / s->btn, 0, kBarCount - 1)];
   return Action::None;
 }
 
 static RECT ButtonRect(const Overlay* s, Action a) {
+  for (int i = 0; i < kFormatCount; i++)
+    if (kFormatActions[i] == a) return {s->formatBar.left + i * s->btn, s->formatBar.top, s->formatBar.left + (i + 1) * s->btn, s->formatBar.bottom};
   for (int i = 0; i < kToolCount; i++)
     if (kToolActions[i] == a) return {s->bars.tools.left, s->bars.tools.top + i * s->btn, s->bars.tools.right, s->bars.tools.top + (i + 1) * s->btn};
   for (int i = 0; i < kBarCount; i++)
@@ -443,6 +452,16 @@ static std::unique_ptr<Bitmap> Crop(Overlay* s) {
 
 static int StyleFromSettings() {
   return (gSettings.textBold ? FontStyleBold : 0) | (gSettings.textItalic ? FontStyleItalic : 0) | (gSettings.textUnderline ? FontStyleUnderline : 0);
+}
+
+static int FormatBit(Action a) {
+  return a == Action::TextBold ? FontStyleBold : a == Action::TextItalic ? FontStyleItalic : FontStyleUnderline;
+}
+
+static int CurrentTextStyle(const Overlay* s) {
+  if (s->editing) return s->editStyle;
+  if (s->selected >= 0 && s->selected < (int)s->items.size() && s->items[s->selected].kind == Kind::Text) return s->items[s->selected].fontStyle;
+  return StyleFromSettings();
 }
 
 static void StoreStyleInSettings(int style) {
@@ -681,17 +700,10 @@ static void ShowSizeMenu(HWND h, Overlay* s) {
     case Action::Number: choices = numbers; setting = &gSettings.numberSize; break;
     default: choices = strokes; setting = &gSettings.thickness; break;
   }
-  enum { ID_BOLD = 10, ID_ITALIC, ID_UNDERLINE, ID_RESET1, ID_RESET5, ID_RESET10 };
+  enum { ID_RESET1 = 10, ID_RESET5, ID_RESET10 };
   HMENU q = CreatePopupMenu();
   for (int i = 0; i < 3; i++) AppendMenuW(q, MF_STRING | (choices[i].value == *setting ? MF_CHECKED : 0), i + 1, choices[i].name);
-  if (s->tool == Action::Text) {
-    AppendMenuW(q, MF_SEPARATOR, 0, nullptr);
-    const Annotation* text = SelectedText(s);
-    const int style = text ? text->fontStyle : StyleFromSettings();
-    AppendMenuW(q, MF_STRING | ((style & FontStyleBold) ? MF_CHECKED : 0), ID_BOLD, L"Negrita\tCtrl+B");
-    AppendMenuW(q, MF_STRING | ((style & FontStyleItalic) ? MF_CHECKED : 0), ID_ITALIC, L"Cursiva\tCtrl+I");
-    AppendMenuW(q, MF_STRING | ((style & FontStyleUnderline) ? MF_CHECKED : 0), ID_UNDERLINE, L"Subrayado\tCtrl+U");
-  } else if (s->tool == Action::Number) {
+  if (s->tool == Action::Number) {
     AppendMenuW(q, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(q, MF_STRING, ID_RESET1, L"Reiniciar numeración en 1");
     AppendMenuW(q, MF_STRING, ID_RESET5, L"Comenzar en 5");
@@ -701,9 +713,6 @@ static void ShowSizeMenu(HWND h, Overlay* s) {
   const int c = TrackPopupMenu(q, TPM_RETURNCMD, p.x, p.y, 0, h, nullptr);
   DestroyMenu(q);
   if (c >= 1 && c <= 3) *setting = choices[c - 1].value;
-  else if (c == ID_BOLD) ToggleTextStyle(h, s, FontStyleBold);
-  else if (c == ID_ITALIC) ToggleTextStyle(h, s, FontStyleItalic);
-  else if (c == ID_UNDERLINE) ToggleTextStyle(h, s, FontStyleUnderline);
   else if (c >= ID_RESET1 && c <= ID_RESET10) s->numberStart = s->nextNumber = c == ID_RESET1 ? 1 : c == ID_RESET5 ? 5 : 10;
   if (c) SaveSettings();
   Repaint(h);
@@ -850,6 +859,17 @@ static void DrawIcon(Graphics& g, Action a, RECT r, Color c, double uiScale) {
       break;
     }
     case Action::Close: g.DrawLine(&p, 12, 13, 26, 27); g.DrawLine(&p, 26, 13, 12, 27); break;
+    case Action::TextBold:
+    case Action::TextItalic:
+    case Action::TextUnderline: {
+      FontFamily family(L"Segoe UI");
+      Font f(&family, 21, FormatBit(a), UnitPixel);
+      StringFormat sf;
+      sf.SetAlignment(StringAlignmentCenter);
+      sf.SetLineAlignment(StringAlignmentCenter);
+      g.DrawString(a == Action::TextBold ? L"B" : a == Action::TextItalic ? L"I" : L"U", -1, &f, RectF(0, 0, 38, 40), &sf, &b);
+      break;
+    }
     default: break;
   }
   g.Restore(state);
@@ -874,6 +894,9 @@ static const wchar_t* ActionName(Action a) {
     case Action::Copy: return L"Copiar (Ctrl+C)";
     case Action::Save: return gSettings.autoSave ? L"Guardar automático (Ctrl+S)" : L"Guardar (Ctrl+S)";
     case Action::Close: return L"Cerrar (Esc)";
+    case Action::TextBold: return L"Negrita (Ctrl+B)";
+    case Action::TextItalic: return L"Cursiva (Ctrl+I)";
+    case Action::TextUnderline: return L"Subrayado (Ctrl+U)";
     default: return L"";
   }
 }
@@ -894,7 +917,8 @@ static void PaintBar(Graphics& g, const Overlay* s, RECT bar, const Action* acti
     const RECT r = vertical ? RECT{bar.left, bar.top + i * s->btn, bar.right, bar.top + (i + 1) * s->btn}
                             : RECT{bar.left + i * s->btn, bar.top, bar.left + (i + 1) * s->btn, bar.bottom};
     const Action a = actions[i];
-    const bool active = s->tool == a, hot = s->hover == a;
+    const bool active = IsFormat(a) ? (CurrentTextStyle(s) & FormatBit(a)) != 0 : s->tool == a;
+    const bool hot = s->hover == a;
     const bool disabled = (a == Action::Undo && s->undo.empty()) || (a == Action::Redo && s->redo.empty());
     if (active || (hot && !disabled)) {
       const REAL inset = (REAL)Sc(s, 3);
@@ -928,7 +952,7 @@ static void PaintLabel(Graphics& g, const Overlay* s, const wstring& text, RectF
 
 static void PaintTooltip(Graphics& g, const Overlay* s) {
   if (s->hover == Action::None) return;
-  const wstring name = s->hover == Action::SizeMenu && s->tool == Action::Text ? L"Tamaño y formato" : ActionName(s->hover);
+  const wstring name = ActionName(s->hover);
   const RECT b = ButtonRect(s, s->hover);
   const RECT monitor = MonitorRectAt(s, {b.left, b.top});
   const REAL w = (REAL)Sc(s, 12 + 6.2 * name.size()), height = (REAL)Sc(s, 25), gap = (REAL)Sc(s, 6);
@@ -1065,6 +1089,7 @@ static void PaintOverlay(Overlay* s) {
   if (s->phase == Phase::Editing) {
     PaintBar(g, s, s->bars.tools, kToolActions, kToolCount, true);
     PaintBar(g, s, s->bars.actions, kBarActions, kBarCount, false);
+    if (FormatBarVisible(s)) PaintBar(g, s, s->formatBar, kFormatActions, kFormatCount, false);
     PaintTooltip(g, s);
   } else if (gSettings.showMagnifier) {
     PaintMagnifier(g, s);
@@ -1106,6 +1131,12 @@ static void OnLeftDown(HWND h, Overlay* s, POINT p) {
     s->drag = Drag::Create;
     s->start = p;
     SetCapture(h);
+    return;
+  }
+  // Antes de confirmar el texto: dar formato no debe interrumpir lo que se esta escribiendo.
+  const Action format = HitButton(s, p);
+  if (IsFormat(format)) {
+    ToggleTextStyle(h, s, FormatBit(format));
     return;
   }
   const bool wasEditing = s->editing;

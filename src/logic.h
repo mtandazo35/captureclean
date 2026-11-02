@@ -106,6 +106,26 @@ inline BarLayout PlaceToolbars(const RECT& sel, const RECT& mon, int button, int
   return {tools, actions};
 }
 
+// La mini barra de formato sale a la altura del boton Texto, por el lado donde quepa.
+inline RECT PlaceFormatBar(const RECT& tools, const RECT& actions, const RECT& mon, int button, int gap, int textIndex, int count) {
+  const int m = 5, w = button * count;
+  auto fit = [](int v, int lo, int hi) { return std::clamp(v, lo, std::max(lo, hi)); };
+  int x = tools.right + gap;
+  if (x + w > mon.right - m) x = tools.left - gap - w;
+  x = fit(x, mon.left + m, mon.right - w - m);
+  int y = fit(tools.top + textIndex * button, mon.top + m, mon.bottom - button - m);
+  RECT bar{x, y, x + w, y + button}, overlap;
+  if (IntersectRect(&overlap, &bar, &actions)) {
+    y = fit(actions.top - button - gap, mon.top + m, mon.bottom - button - m);
+    bar = {x, y, x + w, y + button};
+    if (IntersectRect(&overlap, &bar, &actions)) {
+      y = fit(actions.bottom + gap, mon.top + m, mon.bottom - button - m);
+      bar = {x, y, x + w, y + button};
+    }
+  }
+  return bar;
+}
+
 // Edicion de texto en la propia captura. No parte pares sustitutos (emoji).
 struct TextEdit {
   std::wstring text;

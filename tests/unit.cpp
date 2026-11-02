@@ -32,6 +32,34 @@ static void TestToolbarsStayOnMonitor() {
   }
 }
 
+static void TestFormatBarStaysClear() {
+  const std::vector<RECT> monitors = {{0, 0, 1920, 1080}, {-1920, 1, 0, 1081}, {0, 0, 1024, 768}};
+  for (const RECT& mon : monitors) {
+    for (int x = 0; x < 6; x++) for (int y = 0; y < 6; y++) for (int w = 1; w <= 6; w++) for (int h = 1; h <= 6; h++) {
+      const int sw = logic::Width(mon) * w / 6, sh = logic::Height(mon) * h / 6;
+      const int sx = mon.left + (logic::Width(mon) - sw) * x / 5, sy = mon.top + (logic::Height(mon) - sh) * y / 5;
+      const RECT sel{sx, sy, sx + sw, sy + sh};
+      const BarLayout b = PlaceToolbars(sel, mon, kButtonSize, kToolbarGap, kToolCount, kBarCount);
+      const RECT f = PlaceFormatBar(b.tools, b.actions, mon, kButtonSize, kToolbarGap, kTextToolIndex, kFormatCount);
+      RECT overlap;
+      CHECK(Contained(f, mon));
+      CHECK(!IntersectRect(&overlap, &f, &b.tools));
+      CHECK(!IntersectRect(&overlap, &f, &b.actions));
+      CHECK(logic::Width(f) == kButtonSize * kFormatCount && logic::Height(f) == kButtonSize);
+    }
+  }
+}
+
+static void TestFormatBarNextToTextButton() {
+  CHECK(kToolActions[kTextToolIndex] == Action::Text);
+  const RECT mon{0, 0, 1920, 1080}, sel{300, 200, 900, 700};
+  const BarLayout b = PlaceToolbars(sel, mon, 34, 7, kToolCount, kBarCount);
+  const RECT f = PlaceFormatBar(b.tools, b.actions, mon, 34, 7, kTextToolIndex, kFormatCount);
+  CHECK(f.left == b.tools.right + 7);
+  CHECK(f.top == b.tools.top + kTextToolIndex * 34);
+  for (Action a : kFormatActions) CHECK(IsFormat(a) && !IsTool(a));
+}
+
 static void TestToolbarPreference() {
   const RECT mon{0, 0, 1920, 1080}, sel{300, 200, 900, 700};
   const BarLayout b = PlaceToolbars(sel, mon, 34, 7, kToolCount, kBarCount);
@@ -145,6 +173,8 @@ static void TestToolIdsMatchSavedPreference() {
 
 int main() {
   TestToolbarsStayOnMonitor();
+  TestFormatBarStaysClear();
+  TestFormatBarNextToTextButton();
   TestToolbarPreference();
   TestGrips();
   TestApplyGrip();

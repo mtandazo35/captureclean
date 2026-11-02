@@ -119,7 +119,13 @@ static void ShowTrayMenu(HWND h) {
 
 static LRESULT CALLBACK HostProc(HWND h, UINT m, WPARAM w, LPARAM l) {
   if (gTaskbarCreated && m == gTaskbarCreated) {
-    if (AddTray(h)) FlushHotkeyWarning();
+    // Explorer puede avisar antes de aceptar iconos: si falla, se reintenta igual que al iniciar sesion.
+    if (AddTray(h)) {
+      FlushHotkeyWarning();
+    } else {
+      gTrayRetries = 0;
+      SetTimer(h, TIMER_TRAY_RETRY, 2000, nullptr);
+    }
     return 0;
   }
   switch (m) {

@@ -1,5 +1,10 @@
 # Cambios
 
+## 3.3.2
+
+- El formato de texto pasa a una mini barra **B I U** junto al botón Texto. Queda abierta mientras se escribe, marca lo activo y no interrumpe la escritura. También aparece al seleccionar un texto.
+- Si el Explorador tarda en aceptar iconos tras reiniciarse, el icono de la bandeja se reintenta en vez de perderse.
+
 ## 3.3.1
 
 - Formato de texto: negrita, cursiva y subrayado, combinables. Se eligen en el menú *Tamaño y formato* con la herramienta Texto, con `Ctrl+B`, `Ctrl+I` y `Ctrl+U`, o en Preferencias. Se aplican al texto que se escribe, al seleccionado o, si no hay ninguno, a los textos siguientes.
