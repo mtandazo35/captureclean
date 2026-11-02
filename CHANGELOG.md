@@ -15,9 +15,9 @@
 
 ## 3.3.0
 
-Reescrita sobre el código de la 2.10.1, recuperando las funciones de la 3.2.8.
+Versión reescrita, con el código reorganizado y pruebas automáticas.
 
-**Funciones de la 3.2.8 recuperadas:** captura de ventana activa y de escritorio completo, lupa, pixelar, numerar, seleccionar y mover, colores rápidos, tamaños de trazo, resaltador y texto, negrita, guardado automático en PNG o JPEG, confirmación al cerrar con `Esc`, ventana de preferencias e inicio con Windows configurable. Se conservan las preferencias ya guardadas.
+**Funciones:** captura de ventana activa y de escritorio completo, lupa, pixelar, numerar, seleccionar y mover, colores rápidos, tamaños de trazo, resaltador y texto, negrita, guardado automático en PNG o JPEG, confirmación al cerrar con `Esc`, ventana de preferencias e inicio con Windows configurable. Se conservan las preferencias ya guardadas.
 
 **Novedades:**
 
