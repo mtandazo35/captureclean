@@ -48,6 +48,11 @@ jobs:
           $hash = (Get-Content "$setup.sha256").Split(' ')[0]
           if ($hash -ne (Get-FileHash $setup -Algorithm SHA256).Hash) { throw 'SHA256 no coincide' }
 
+          # Windows 11: valor conocido, para comprobar que se cambia y luego se restaura.
+          $keyboard = 'HKCU:\Control Panel\Keyboard'
+          $prtscn = 'PrintScreenKeyForSnippingEnabled'
+          New-ItemProperty $keyboard $prtscn -Value 1 -PropertyType DWord -Force | Out-Null
+
           # Silencioso, en una carpeta con espacios: instala sin abrir la aplicacion.
           $dir = 'C:\cc prueba'
           Run-Setup $setup "/S /D=$dir"
@@ -60,6 +65,10 @@ jobs:
           $run = (Get-ItemProperty $runKey).CaptureClean
           if ($run -ne "`"$dir\CaptureClean.exe`" --background") { throw "Run: $run" }
 
+          # Impr Pant queda para CaptureClean, recordando lo que habia.
+          if ((Get-ItemProperty $keyboard).$prtscn -ne 0) { throw 'No libero Impr Pant de Recortes' }
+          if ((Get-ItemProperty 'HKCU:\Software\CaptureClean').PrintScreenPrevious -ne '1') { throw 'No guardo el valor anterior de Impr Pant' }
+
           # /ABRIR abre la aplicacion, y la ruta con espacios funciona.
           Run-Setup $setup '/S /ABRIR'
           if (-not (Is-Running)) { throw '/ABRIR no abrio la aplicacion' }
@@ -68,6 +77,7 @@ jobs:
           Run-Setup $setup '/S'
           if (Is-Running) { throw 'No cerro la aplicacion al actualizar' }
           if (Test-Path "$env:LOCALAPPDATA\CaptureClean\CaptureClean.exe") { throw 'Actualizar creo una segunda copia' }
+          if ((Get-ItemProperty 'HKCU:\Software\CaptureClean').PrintScreenPrevious -ne '1') { throw 'Actualizar perdio el valor anterior de Impr Pant' }
 
           # Una version mas nueva instalada: en silencio no se sobrescribe.
           Set-ItemProperty $uninstKey DisplayVersion '99.0.0'
@@ -83,6 +93,8 @@ jobs:
           if (Test-Path $uninstKey) { throw 'El desinstalador dejo la entrada de Aplicaciones' }
           if ((Get-ItemProperty $runKey).CaptureClean) { throw 'El desinstalador dejo el inicio con Windows' }
           if (-not (Test-Path 'HKCU:\Software\CaptureClean')) { throw 'En silencio deben conservarse las preferencias' }
+          if ((Get-ItemProperty $keyboard).$prtscn -ne 1) { throw 'El desinstalador no restauro Impr Pant' }
+          if ((Get-ItemProperty 'HKCU:\Software\CaptureClean').PrintScreenPrevious) { throw 'Quedo guardado el valor anterior de Impr Pant' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

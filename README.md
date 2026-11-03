@@ -24,7 +24,7 @@ CaptureClean queda en la bandeja del sistema, junto al reloj. Si no ves el icono
 | La última zona otra vez | `Mayús+Impr Pant` o el menú de la bandeja |
 | Todo el escritorio | El menú de la bandeja, o `Ctrl+A` durante la captura |
 
-> **`Impr Pant` en Windows 11:** si se abre la herramienta Recortes en su lugar, desactiva *Usar el botón Impr Pant para abrir la captura de pantalla* en *Configuración → Accesibilidad → Teclado* y reinicia CaptureClean. Mientras tanto puedes usar `Ctrl+Mayús+S`.
+> **`Impr Pant` en Windows 11:** Windows la reserva para la herramienta Recortes. El instalador ofrece, marcada por defecto, la opción de usarla para CaptureClean, y al desinstalar deja ese ajuste como estaba. Si sigue abriéndose Recortes, cierra sesión en Windows y vuelve a entrar. Mientras tanto puedes usar `Ctrl+Mayús+S`.
 
 ## Anotar
 

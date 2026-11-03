@@ -12,6 +12,10 @@
 !define DEFAULT_DIR "$LOCALAPPDATA\CaptureClean"
 ; Windows 10 1703: la aplicacion importa SetProcessDpiAwarenessContext, que no existe antes.
 !define MIN_BUILD 15063
+; Windows 11 reserva Impr Pant para Recortes con este ajuste por usuario.
+!define WIN11_BUILD 22000
+!define KEYBOARD_KEY "Control Panel\Keyboard"
+!define PRTSCN_VALUE "PrintScreenKeyForSnippingEnabled"
 
 Unicode True
 !include "MUI2.nsh"
@@ -41,6 +45,7 @@ ManifestDPIAware true
 
 Var OldVersion
 Var WelcomeText
+Var FinishText
 
 !define MUI_ICON "../assets/CaptureClean.ico"
 !define MUI_UNICON "../assets/CaptureClean.ico"
@@ -54,6 +59,7 @@ Var WelcomeText
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipDirectoryOnUpgrade
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_TEXT "$FinishText"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\CaptureClean.exe"
 !define MUI_FINISHPAGE_RUN_PARAMETERS "--installed"
 !define MUI_FINISHPAGE_RUN_TEXT "Abrir CaptureClean"
@@ -104,6 +110,26 @@ FunctionEnd
 !insertmacro CLOSE_APP_FUNCTION ""
 !insertmacro CLOSE_APP_FUNCTION "un."
 
+; Deja el ajuste de Windows como estaba antes de instalar. "none": el valor no existia.
+!macro RESTORE_PRTSCN_FUNCTION un
+Function ${un}RestorePrintScreen
+  ClearErrors
+  ReadRegStr $0 HKCU "${APP_KEY}" "PrintScreenPrevious"
+  ${If} ${Errors}
+    Return
+  ${EndIf}
+  ${If} $0 == "none"
+    DeleteRegValue HKCU "${KEYBOARD_KEY}" "${PRTSCN_VALUE}"
+  ${Else}
+    WriteRegDWORD HKCU "${KEYBOARD_KEY}" "${PRTSCN_VALUE}" $0
+  ${EndIf}
+  DeleteRegValue HKCU "${APP_KEY}" "PrintScreenPrevious"
+  SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Keyboard" /TIMEOUT=1000
+FunctionEnd
+!macroend
+!insertmacro RESTORE_PRTSCN_FUNCTION ""
+!insertmacro RESTORE_PRTSCN_FUNCTION "un."
+
 Section "CaptureClean (requerido)" SEC_MAIN
   SectionIn RO
   Call CloseApp
@@ -121,6 +147,9 @@ SectionEnd
 Section "Iniciar con Windows" SEC_AUTOSTART
 SectionEnd
 
+Section "Usar Impr Pant para CaptureClean, en lugar de Recortes de Windows" SEC_PRTSCN
+SectionEnd
+
 ; Tambien aplica lo que se desmarco al actualizar.
 Section "-Aplicar"
   ${If} ${SectionIsSelected} ${SEC_DESKTOP}
@@ -136,6 +165,30 @@ Section "-Aplicar"
   ${Else}
     WriteRegDWORD HKCU "${APP_KEY}" "AutoStartEnabled" 0
     DeleteRegValue HKCU "${RUN_KEY}" "CaptureClean"
+  ${EndIf}
+
+  StrCpy $FinishText "CaptureClean ${VERSION} se ha instalado correctamente."
+  ${If} ${AtLeastBuild} ${WIN11_BUILD}
+    ${If} ${SectionIsSelected} ${SEC_PRTSCN}
+      ; El valor original se guarda una sola vez: al actualizar ya vale 0.
+      ClearErrors
+      ReadRegStr $0 HKCU "${APP_KEY}" "PrintScreenPrevious"
+      ${If} ${Errors}
+        ClearErrors
+        ReadRegDWORD $0 HKCU "${KEYBOARD_KEY}" "${PRTSCN_VALUE}"
+        ${If} ${Errors}
+          StrCpy $0 "none"
+        ${EndIf}
+        WriteRegStr HKCU "${APP_KEY}" "PrintScreenPrevious" $0
+      ${EndIf}
+      WriteRegDWORD HKCU "${KEYBOARD_KEY}" "${PRTSCN_VALUE}" 0
+      WriteRegDWORD HKCU "${APP_KEY}" "PrintScreenChoice" 1
+      SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Keyboard" /TIMEOUT=1000
+      StrCpy $FinishText "CaptureClean ${VERSION} se ha instalado correctamente.$\r$\n$\r$\nSi Impr Pant sigue abriendo Recortes, cierra sesión en Windows y vuelve a entrar."
+    ${Else}
+      Call RestorePrintScreen
+      WriteRegDWORD HKCU "${APP_KEY}" "PrintScreenChoice" 0
+    ${EndIf}
   ${EndIf}
 
   WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "CaptureClean"
@@ -213,6 +266,19 @@ Function .onInit
     !insertmacro UnselectSection ${SEC_AUTOSTART}
   ${EndIf}
 
+  ; Solo existe en Windows 11, y respeta si el usuario ya la habia desmarcado.
+  ${If} ${AtLeastBuild} ${WIN11_BUILD}
+    ClearErrors
+    ReadRegDWORD $0 HKCU "${APP_KEY}" "PrintScreenChoice"
+    ${IfNot} ${Errors}
+    ${AndIf} $0 == 0
+      !insertmacro UnselectSection ${SEC_PRTSCN}
+    ${EndIf}
+  ${Else}
+    !insertmacro UnselectSection ${SEC_PRTSCN}
+    SectionSetText ${SEC_PRTSCN} ""
+  ${EndIf}
+
   ${If} $OldVersion == ""
     StrCpy $WelcomeText "Este asistente instalará CaptureClean ${VERSION}, un capturador de pantalla local: no sube nada a internet ni necesita permisos de administrador."
     Return
@@ -251,6 +317,7 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "${UNINST_KEY}"
   DeleteRegValue HKCU "${RUN_KEY}" "CaptureClean"
+  Call un.RestorePrintScreen
   ; Las capturas guardadas nunca se tocan. En silencio se conservan tambien las preferencias.
   MessageBox MB_YESNO|MB_ICONQUESTION "¿Quieres borrar también tus preferencias de CaptureClean?$\r$\nTus capturas guardadas no se borrarán." /SD IDNO IDNO keep
   DeleteRegKey HKCU "${APP_KEY}"

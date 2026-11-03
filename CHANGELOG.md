@@ -1,5 +1,10 @@
 # Cambios
 
+## 3.3.4
+
+- Windows 11: el instalador ofrece, marcada por defecto, la opción de usar `Impr Pant` para CaptureClean en lugar de Recortes de Windows. Al desinstalar, o al desmarcarla, el ajuste de Windows vuelve a como estaba.
+- Si `Impr Pant` está ocupada al arrancar, CaptureClean la toma en cuanto queda libre, sin tener que reiniciarlo.
+
 ## 3.3.3
 
 - El instalador oficial lo compila y lo publica GitHub Actions a partir del código de cada etiqueta, después de pasar las pruebas. La aplicación no cambia respecto a la 3.3.2.

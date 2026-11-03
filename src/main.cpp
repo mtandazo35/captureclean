@@ -13,7 +13,7 @@ HWND gHost;
 static constexpr UINT WM_TRAY = WM_APP + 10;
 // Lo envia otra instancia al lanzarla con el programa ya abierto.
 static constexpr UINT WM_APP_CAPTURE = WM_APP + 11;
-static constexpr UINT TIMER_CAPTURE = 77, TIMER_TRAY_RETRY = 78;
+static constexpr UINT TIMER_CAPTURE = 77, TIMER_TRAY_RETRY = 78, TIMER_HOTKEY_RETRY = 79;
 static constexpr int kTrayRetries = 30;
 
 enum { HOTKEY_AREA = 1, HOTKEY_AREA_ALT, HOTKEY_WINDOW, HOTKEY_REPEAT };
@@ -138,8 +138,11 @@ static LRESULT CALLBACK HostProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       RegisterHotKey(h, HOTKEY_WINDOW, MOD_ALT | MOD_NOREPEAT, VK_SNAPSHOT);
       RegisterHotKey(h, HOTKEY_REPEAT, MOD_SHIFT | MOD_NOREPEAT, VK_SNAPSHOT);
       gHotkeyBusy = !primary;
-      if (!primary) gHotkeyWarning = alt ? L"Otro programa está usando Impr Pant. Usa Ctrl+Mayús+S o cierra ese programa."
-                                         : L"Otro programa está usando Impr Pant y Ctrl+Mayús+S. Captura desde el menú de la bandeja o cierra ese programa.";
+      if (!primary) {
+        gHotkeyWarning = alt ? L"Impr Pant está ocupada por otro programa o por Recortes de Windows. Usa Ctrl+Mayús+S."
+                             : L"Impr Pant y Ctrl+Mayús+S están ocupadas por otro programa. Captura desde el menú de la bandeja.";
+        SetTimer(h, TIMER_HOTKEY_RETRY, 15000, nullptr);  // se toma en cuanto la liberen
+      }
       if (tray) FlushHotkeyWarning();
       return 0;
     }
@@ -153,6 +156,8 @@ static LRESULT CALLBACK HostProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (w == TIMER_CAPTURE) {
         KillTimer(h, TIMER_CAPTURE);
         OpenOverlay(gPendingMode, gLastForeground, gHasLastSelection ? &gLastSelection : nullptr);
+      } else if (w == TIMER_HOTKEY_RETRY) {
+        if (RegisterHotKey(h, HOTKEY_AREA, MOD_NOREPEAT, VK_SNAPSHOT)) KillTimer(h, TIMER_HOTKEY_RETRY);
       } else if (w == TIMER_TRAY_RETRY) {
         const bool ok = AddTray(h);
         if (ok) FlushHotkeyWarning();
